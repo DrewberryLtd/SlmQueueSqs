@@ -15,6 +15,13 @@ class SqsQueueOptions extends AbstractOptions
     protected $queueUrl;
 
     /**
+     * Required for FIFO queues
+     *
+     * @var string
+     */
+    protected $messageGroupId = false;
+
+    /**
      * Set the queue URL
      *
      * @param string $queueUrl
@@ -32,5 +39,25 @@ class SqsQueueOptions extends AbstractOptions
     public function getQueueUrl()
     {
         return $this->queueUrl;
+    }
+
+    /**
+     * Sets the message group id, required by FIFO queues
+     *
+     * @param string $messageGroupId
+     */
+    public function setMessageGroupId($messageGroupId)
+    {
+        $this->messageGroupId = (string) $messageGroupId;
+    }
+
+    /**
+     * Get the message group id, required by FIFO queues
+     *
+     * @return string
+     */
+    public function getMessageGroupId()
+    {
+        return $this->messageGroupId;
     }
 }

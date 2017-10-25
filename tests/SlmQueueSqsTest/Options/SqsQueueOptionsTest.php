@@ -24,8 +24,9 @@ class SqsQueueOptionsTest extends \PHPUnit_Framework_TestCase
 {
     public function testSettersAndGetters()
     {
-        $options = new SqsQueueOptions(array('queue_url' => 'https://sqs.bar'));
+        $options = new SqsQueueOptions(array('queue_url' => 'https://sqs.bar', 'messageGroupId' => 'default'));
 
         $this->assertEquals('https://sqs.bar', $options->getQueueUrl());
+        $this->assertEquals('default', $options->getMessageGroupId());
     }
 }

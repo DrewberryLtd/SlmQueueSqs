@@ -64,6 +64,11 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
             'DelaySeconds' => isset($options['delay_seconds']) ? $options['delay_seconds'] : null
         );
 
+        if ($this->queueOptions->getMessageGroupId()) {
+            $parameters['MessageGroupId'] = $this->queueOptions->getMessageGroupId();
+            $parameters['MessageDeduplicationId'] = $job->getId();
+        }
+
         $result = $this->sqsClient->sendMessage(array_filter($parameters));
 
         $job->setMetadata(array(
@@ -153,6 +158,11 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
                 'MessageBody'  => $this->serializeJob($job),
                 'DelaySeconds' => isset($options[$key]['delay_seconds']) ? $options[$key]['delay_seconds'] : null
             );
+
+            if ($this->queueOptions->getMessageGroupId()) {
+                $jobParameters['MessageGroupId'] = $this->queueOptions->getMessageGroupId();
+                $jobParameters['MessageDeduplicationId'] = $job->getId();
+            }
 
             $parameters['Entries'][] = array_filter($jobParameters, function ($value) {
                 return $value !== null;
