@@ -18,7 +18,6 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      * @var SqsClient
      */
     protected $sqsClient;
-
     /**
      * @var SqsQueueOptions
      */
@@ -45,7 +44,7 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
 
         // If an URL has explicitly been given in the options, let's use it, otherwise we dynamically fetch it
         if (!$this->queueOptions->getQueueUrl()) {
-            $queue = $this->sqsClient->getQueueUrl(array('QueueName' => $name));
+            $queue = $this->sqsClient->getQueueUrl(['QueueName' => $name]);
             $this->queueOptions->setQueueUrl($queue['QueueUrl']);
         }
     }
@@ -56,25 +55,25 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      *
      * {@inheritDoc}
      */
-    public function push(JobInterface $job, array $options = array())
+    public function push(JobInterface $job, array $options = [])
     {
-        $parameters = array(
-            'QueueUrl'     => $this->queueOptions->getQueueUrl(),
-            'MessageBody'  => $this->serializeJob($job),
-            'DelaySeconds' => isset($options['delay_seconds']) ? $options['delay_seconds'] : null
-        );
+        $parameters = [
+            'QueueUrl' => $this->queueOptions->getQueueUrl(),
+            'MessageBody' => $this->serializeJob($job),
+            'DelaySeconds' => isset($options['delay_seconds']) ? $options['delay_seconds'] : null,
+        ];
 
-        if ($this->queueOptions->getMessageGroupId()) {
-            $parameters['MessageGroupId'] = $this->queueOptions->getMessageGroupId();
-            $parameters['MessageDeduplicationId'] = $job->getId();
-        }
+        $parameters['MessageGroupId']         = $job->getId();
+        $parameters['MessageDeduplicationId'] = $job->getId();
 
         $result = $this->sqsClient->sendMessage(array_filter($parameters));
 
-        $job->setMetadata(array(
-            '__id__' => $result['MessageId'],
-            'md5'    => $result['MD5OfMessageBody']
-        ));
+        $job->setMetadata(
+            [
+                '__id__' => $result['MessageId'],
+                'md5' => $result['MD5OfMessageBody'],
+            ]
+        );
     }
 
     /**
@@ -88,7 +87,7 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      *
      * {@inheritDoc}
      */
-    public function pop(array $options = array())
+    public function pop(array $options = [])
     {
         $options['max_number_of_messages'] = 1;
 
@@ -100,11 +99,13 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
             case 1:
                 return reset($jobs);
             default:
-                throw new Exception\RuntimeException(sprintf(
-                    '%s jobs were popped in "%s" method, while only one (or zero) were expected.',
-                    count($jobs),
-                    __METHOD__
-                ));
+                throw new Exception\RuntimeException(
+                    sprintf(
+                        '%s jobs were popped in "%s" method, while only one (or zero) were expected.',
+                        count($jobs),
+                        __METHOD__
+                    )
+                );
         }
     }
 
@@ -113,10 +114,10 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      */
     public function delete(JobInterface $job)
     {
-        $parameters = array(
-            'QueueUrl'      => $this->queueOptions->getQueueUrl(),
-            'ReceiptHandle' => $job->getMetadata('receiptHandle')
-        );
+        $parameters = [
+            'QueueUrl' => $this->queueOptions->getQueueUrl(),
+            'ReceiptHandle' => $job->getMetadata('receiptHandle'),
+        ];
 
         $this->sqsClient->deleteMessage($parameters);
     }
@@ -129,7 +130,7 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      *
      * {@inheritDoc}
      */
-    public function batchPush(array $jobs, array $options = array())
+    public function batchPush(array $jobs, array $options = [])
     {
         // SQS can only handle up to 10 jobs, so if we have more jobs, we handle them in slices
         if (count($jobs) > 10) {
@@ -146,27 +147,28 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
             return;
         }
 
-        $parameters = array(
+        $parameters = [
             'QueueUrl' => $this->queueOptions->getQueueUrl(),
-            'Entries'  => array()
-        );
+            'Entries' => [],
+        ];
 
         /** @var $job JobInterface */
         foreach ($jobs as $key => $job) {
-            $jobParameters = array(
-                'Id'           => $key, // Identifier of the message in the batch
-                'MessageBody'  => $this->serializeJob($job),
-                'DelaySeconds' => isset($options[$key]['delay_seconds']) ? $options[$key]['delay_seconds'] : null
+            $jobParameters = [
+                'Id' => $key, // Identifier of the message in the batch
+                'MessageBody' => $this->serializeJob($job),
+                'DelaySeconds' => isset($options[$key]['delay_seconds']) ? $options[$key]['delay_seconds'] : null,
+            ];
+
+            $jobParameters['MessageGroupId']         = $job->getId();
+            $jobParameters['MessageDeduplicationId'] = $job->getId();
+
+            $parameters['Entries'][] = array_filter(
+                $jobParameters,
+                function ($value) {
+                    return $value !== null;
+                }
             );
-
-            if ($this->queueOptions->getMessageGroupId()) {
-                $jobParameters['MessageGroupId'] = $this->queueOptions->getMessageGroupId();
-                $jobParameters['MessageDeduplicationId'] = $job->getId();
-            }
-
-            $parameters['Entries'][] = array_filter($jobParameters, function ($value) {
-                return $value !== null;
-            });
         }
 
         $result   = $this->sqsClient->sendMessageBatch($parameters);
@@ -174,10 +176,12 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
 
         foreach ($messages as $message) {
             $batchId = $message['Id'];
-            $jobs[$batchId]->setMetadata(array(
-                '__id__' => $message['MessageId'],
-                'md5'    => $message['MD5OfMessageBody']
-            ));
+            $jobs[$batchId]->setMetadata(
+                [
+                    '__id__' => $message['MessageId'],
+                    'md5' => $message['MD5OfMessageBody'],
+                ]
+            );
         }
     }
 
@@ -195,14 +199,14 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
      *
      * {@inheritDoc}
      */
-    public function batchPop(array $options = array())
+    public function batchPop(array $options = [])
     {
-        $clientOptions = array(
-            'QueueUrl'            => $this->queueOptions->getQueueUrl(),
-            'MaxNumberOfMessages' => isset($options['max_number_of_messages'])
-                ? $options['max_number_of_messages'] : null,
+        $clientOptions = [
+            'QueueUrl' => $this->queueOptions->getQueueUrl(),
+            'MaxNumberOfMessages' => isset($options['max_number_of_messages']) ? $options['max_number_of_messages']
+                : null,
 
-        );
+        ];
 
         if (isset($options['visibility_timeout'])) {
             $clientOptions['VisibilityTimeout'] = $options['visibility_timeout'];
@@ -217,18 +221,18 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
         $messages = $result['Messages'];
 
         if (empty($messages)) {
-            return array();
+            return [];
         }
 
-        $jobs = array();
+        $jobs = [];
         foreach ($messages as $message) {
             $jobs[] = $this->unserializeJob(
                 $message['Body'],
-                array(
-                    '__id__'        => $message['MessageId'],
+                [
+                    '__id__' => $message['MessageId'],
                     'receiptHandle' => $message['ReceiptHandle'],
-                    'md5'           => $message['MD5OfBody']
-                )
+                    'md5' => $message['MD5OfBody'],
+                ]
             );
         }
 
@@ -255,17 +259,17 @@ class SqsQueue extends AbstractQueue implements SqsQueueInterface
             return;
         }
 
-        $parameters = array(
+        $parameters = [
             'QueueUrl' => $this->queueOptions->getQueueUrl(),
-            'Entries'  => array()
-        );
+            'Entries' => [],
+        ];
 
         /** @var $job JobInterface */
         foreach ($jobs as $key => $job) {
-            $jobParameters = array(
-                'Id'            => $key, // Identifier of the message in the batch
-                'ReceiptHandle' => $job->getMetadata('receiptHandle')
-            );
+            $jobParameters = [
+                'Id' => $key, // Identifier of the message in the batch
+                'ReceiptHandle' => $job->getMetadata('receiptHandle'),
+            ];
 
             $parameters['Entries'][] = $jobParameters;
         }
